@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class TemporalWeightedSum(nn.Module):
@@ -12,6 +11,6 @@ class TemporalWeightedSum(nn.Module):
 
     def forward(self, x):
         a = self.fc2(self.relu(self.fc1(x)))           # [batch_size, seq_len, 1]
-        a = F.softmax(a, dim=1)
+        a = torch.softmax(a, dim=1)
         h_hat = torch.sum(a*x, dim=1) # [batch_size, n_channels]
         return h_hat
