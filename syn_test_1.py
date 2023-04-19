@@ -16,6 +16,7 @@ class FeatureExtractor(nn.Module):
         x = self.conv(x)
         x = self.bn(x)
         x = self.relu(x)
+        print("feature",x.shape)
         return x
 
 
@@ -28,17 +29,18 @@ class SpatialSelfAttention(nn.Module):
 
     def forward(self, H):
         N, T = H.shape[0],H.shape[1]
-        print(H.shape)
+        #print(H.shape)
         Q = self.query_layer(H)
         K = self.key_layer(H).transpose(-1,-2)
-        print(Q.size(),K.size())
+        #print(Q.size(),K.size())
         A = torch.matmul(Q, K)
         #A = torch.where(torch.eye(N, device=H.device), torch.zeros_like(A), A)
         A /= torch.sqrt(torch.tensor(K.size(-1)).float())
-        print(A.size())
+        #print(A.size())
         A = self.softmax_layer(A)
-        print(A.size(),H.size())
+        #print(A.size(),H.size())
         H_ = torch.matmul(A, H)
+        print("attention shape", H_.shape)
         return H_ + H
 
 
@@ -53,6 +55,7 @@ class TemporalWeightedSum(nn.Module):
         a = self.fc2(self.relu(self.fc1(x)))           # [batch_size, seq_len, 1]
         a = torch.softmax(a, dim=1)
         h_hat = torch.sum(a*x, dim=1) # [batch_size, n_channels]
+        print("weight",h_hat.shape)
         return h_hat
 
 
@@ -62,31 +65,32 @@ class EncoderLayer(nn.Module):
         self.attention_layer = SpatialSelfAttention(input_dim, hidden_dim)
         self.extractor_layer = FeatureExtractor(input_channel, input_channel)
         self.norm1 = nn.LayerNorm(input_dim)
-        self.norm2 = nn.LayerNorm(hidden_dim)
+        #self.norm2 = nn.LayerNorm(hidden_dim)
 
     def forward(self, x):
         out = self.extractor_layer(x)
         attn_output = self.attention_layer(out)
         out = (out + attn_output)
         out = self.norm1(out)
-        #out2 = self.norm2(out + self.extractor_layer(out.permute(1,3,0,2)).transpose(1, 2))
+        print("Encoder", out.shape)
         return out
-
 
 class DecoderLayer(nn.Module):
     def __init__(self, input_dim,hidden_dim):
         super(DecoderLayer, self).__init__()
         self.self_attention_layer = SpatialSelfAttention(input_dim, hidden_dim)
         self.norm1 = nn.LayerNorm(input_dim)
-        self.attention_layer = SpatialSelfAttention(input_dim, input_dim)
+        #self.attention_layer = SpatialSelfAttention(input_dim, input_dim)
+        self.attention_layer = SpatialSelfAttention(input_dim, hidden_dim)
 
 
     def forward(self, x, encoder_out):
-        print(f'Decoder Layer Input: {x.shape}')
+        #print(f'Decoder Layer Input: {x.shape}')
         out = self.norm1(x)
         attn_output = self.self_attention_layer(encoder_out)
-        print(f'Decoder Layer Self Attention Output: {attn_output.shape}')
+        #print(f'Decoder Layer Self Attention Output: {attn_output.shape}')
         out = (out + attn_output)
+        print("decoder", out.shape)
         # out = self.norm2(out)
         # attn_output, _ = self.attention_layer(out, encoder_out.transpose(1, 2), encoder_out.transpose(1, 2))
         # print(f'Decoder Layer Encoder Attention Output: {attn_output.shape}')
@@ -96,7 +100,7 @@ class DecoderLayer(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, input_dim,inputchannel, hidden_dim, num_layers):
+    def __init__(self, input_dim, inputchannel, hidden_dim, num_layers):
         super(Transformer, self).__init__()
         self.encoder_layers = nn.ModuleList([EncoderLayer(input_dim,inputchannel, hidden_dim) for _ in range(num_layers)])
         self.decoder_layers = nn.ModuleList([DecoderLayer(input_dim,hidden_dim) for _ in range(num_layers)])
@@ -105,24 +109,22 @@ class Transformer(nn.Module):
     def forward(self, x):
         encoder_out = x
         for layer in self.encoder_layers:
-            print('1',encoder_out.shape)
+            print('11',encoder_out.shape)
             encoder_out = layer(encoder_out)
-            print('1',encoder_out.shape)
+            print('12',encoder_out.shape)
         decoder_out = encoder_out
+        print("decoder_out",decoder_out.shape)
         for layer in self.decoder_layers:
             decoder_out = layer(decoder_out, encoder_out)
-        pred_mean = torch.mean(decoder_out, dim=1)
-        out = self.fc_layer(pred_mean)
+        # pred_mean = torch.mean(decoder_out, dim=1, keepdim = True)
+        # print("pred_mean",pred_mean.shape)
+        out = self.fc_layer(decoder_out)
+        print("tran",out.shape)
         return out
 
 
-# attn=EncoderLayer(10,32,64,4)
-# print('ceshi',attn(torch.rand((5,32,10))).shape)
-
-
-
-seq_len = 11
-batch_size =6
+seq_len = 2000
+batch_size = 6
 input_dim = 20
 hidden_dim = 65
 num_layers = 2
@@ -134,15 +136,4 @@ output = model(x)
 print(f'Output shape: {output.shape}')
 print(output)
 
-data_i = np.loadtxt('/research/sust_ncc/att_ec/data/signal_20d_sim0_part0.txt')
-data_i = torch.tensor(data_i)
-print(data_i.type())
-seq = data_i.shape[0]//seq_len
-print(seq)
-data_i = data_i[:seq*seq_len,:]
-print(data_i.shape)
-data_i = data_i.reshape(-1, seq_len, data_i.shape[1]).transpose(1,2)
-data_i = torch.tensor(data_i, dtype = torch.float)
-print(data_i.shape)
-output = model(data_i)
-print(output)
+#train_x, test_x = x[]
